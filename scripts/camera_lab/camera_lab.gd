@@ -21,6 +21,8 @@ const HISTORY := 300
 const CAM_BACK := 6.5
 const CAM_UP := 3.0
 const AUTO_IDLE_DELAY := 3.0
+## Camera roll (bank) toward the turn direction at full left/right input.
+const ROLL_MAX_DEG := 12.0
 
 var player: LabPlayer
 var cams: Array[FollowCam] = []
@@ -35,6 +37,16 @@ var tick_hz := 30
 var time := 0.0
 var autopilot := true
 var show_overlay := true
+
+## Roll spring (shared by all views): left/right input sets the target angle,
+## a damped spring pulls the roll toward it, so tapping a turn key makes the
+## camera lean in, overshoot slightly and settle back.
+var roll_enabled := true
+var roll_k := 60.0
+var roll_zeta := 0.3
+var roll := 0.0
+var _roll_vel := 0.0
+var roll_hist := PackedFloat32Array()
 
 ## Graph data (ring buffers, newest at _hist_head - 1).
 var lag_hist: Array[PackedFloat32Array] = []
@@ -89,6 +101,7 @@ func _ready() -> void:
 		h.resize(HISTORY)
 		lag_hist.append(h)
 	speed_hist.resize(HISTORY)
+	roll_hist.resize(HISTORY)
 
 	hud = LabHud.new()
 	hud.lab = self
@@ -158,6 +171,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			tick_hz = 60 if tick_hz == 30 else 30
 		KEY_R:
 			_reset_cameras()
+		KEY_T:
+			roll_enabled = not roll_enabled
+		KEY_K:
+			roll_k = clampf(roll_k * 0.8, 4.0, 800.0)
+		KEY_L:
+			roll_k = clampf(roll_k * 1.25, 4.0, 800.0)
+		KEY_B:
+			roll_zeta = clampf(roll_zeta - 0.05, 0.0, 2.0)
+		KEY_N:
+			roll_zeta = clampf(roll_zeta + 0.05, 0.0, 2.0)
 		KEY_G:
 			show_overlay = not show_overlay
 		KEY_P:
@@ -210,6 +233,8 @@ func _process(delta: float) -> void:
 		cameras[i].global_position = cams[i].pos
 		if not cams[i].pos.is_equal_approx(cams[i].look):
 			cameras[i].look_at(cams[i].look, Vector3.UP)
+		# Roll about the view axis (local +Z points back at the viewer).
+		cameras[i].rotate_object_local(Vector3.BACK, roll)
 
 
 func _tick(dt: float, manual: Vector2) -> void:
@@ -221,6 +246,7 @@ func _tick(dt: float, manual: Vector2) -> void:
 		jump = _auto_jump
 		_auto_jump = false
 	player.tick(dt, input.x, input.y, jump)
+	_step_roll(dt, input.y)
 
 	var ideal := _ideal()
 	for i in 4:
@@ -230,7 +256,18 @@ func _tick(dt: float, manual: Vector2) -> void:
 		lag_hist[i][hist_head] = fc.pos.distance_to(ideal[0])
 	var v := player.velocity
 	speed_hist[hist_head] = Vector2(v.x, v.z).length()
+	roll_hist[hist_head] = rad_to_deg(roll)
 	hist_head = (hist_head + 1) % HISTORY
+
+
+## Semi-implicit Euler spring-damper on the roll angle:
+##   target = turn * ROLL_MAX;  w += (-K (roll - target) - C w) dt;  roll += w dt
+## with C = 2 zeta sqrt(K). Uses dt, so it behaves the same at 30 and 60 Hz.
+func _step_roll(dt: float, turn: float) -> void:
+	var target := deg_to_rad(ROLL_MAX_DEG) * turn if roll_enabled else 0.0
+	var c := 2.0 * roll_zeta * sqrt(roll_k)
+	_roll_vel += (-roll_k * (roll - target) - c * _roll_vel) * dt
+	roll += _roll_vel * dt
 
 
 ## Returns [ideal camera position, ideal look-at point].
@@ -244,6 +281,8 @@ func _reset_cameras() -> void:
 	var ideal := _ideal()
 	for fc in cams:
 		fc.snap(ideal[0], ideal[1])
+	roll = 0.0
+	_roll_vel = 0.0
 
 
 ## Wander between random waypoints, with stops and jumps, so the different
