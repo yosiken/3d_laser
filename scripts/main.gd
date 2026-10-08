@@ -122,6 +122,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				if event.pressed:
 					curl_enabled = not curl_enabled
 					lasers.curl_enabled = curl_enabled
+			KEY_ESCAPE:
+				if event.pressed:
+					get_tree().change_scene_to_file("res://menu.tscn")
 
 
 func _user_activity() -> void:

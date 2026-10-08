@@ -6,7 +6,7 @@ config_version=5
 
 config/name="Curl Noise Lock-on Laser"
 config/description="3D lock-on laser demo driven by curl noise"
-run/main_scene="res://main.tscn"
+run/main_scene="res://menu.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
 
 [display]

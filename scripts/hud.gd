@@ -9,7 +9,7 @@ const COL_LOCK := Color(1.0, 0.25, 0.45, 1.0)
 
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
@@ -91,7 +91,7 @@ func _draw() -> void:
 	var help := [
 		"HOLD  Left mouse / Touch / Space : sweep to lock on",
 		"RELEASE : fire homing lasers",
-		"[A] auto demo: %s    [C] curl: %s" % ["ON" if main.auto_mode else "OFF", "ON" if main.curl_enabled else "OFF"],
+		"[A] auto demo: %s    [C] curl: %s    [Esc] menu" % ["ON" if main.auto_mode else "OFF", "ON" if main.curl_enabled else "OFF"],
 	]
 	var hy := size.y - 18.0 * s - (help.size() - 1) * 20.0 * s
 	for line: String in help:
